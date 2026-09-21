@@ -38,6 +38,7 @@ class Player {
 class CasinoGame {
     public:
         virtual void play(Player& p) = 0;
+        virtual void cleanupGame(Player& p) = 0;
         virtual std::string getGameName() const = 0;
         virtual ~CasinoGame() = default;
         int m_bet_amount {std::numeric_limits<int>::max()};
@@ -78,6 +79,13 @@ class CoinFlip : public CasinoGame {
             return "CoinFlip";
         }
 
+        void cleanupGame(Player& p) {
+             p.recordResult(m_win);
+            if (m_win) {
+                awardRewards(p);
+            }
+        }
+
         void play(Player& p) {
             m_win = false;
             bool coin = m_dist(m_rng); // true or false
@@ -109,11 +117,8 @@ class CoinFlip : public CasinoGame {
             } else {
                 std::cout << "You lose! It was " << bot_decision << "\n";
             }
-            p.recordResult(m_win);
-
-            if (m_win) {
-                awardRewards(p);
-            }
+            
+            cleanupGame(p);
         }
 };
 
@@ -145,7 +150,7 @@ class Card {
         int drawCard() {
             int index = getRandomCardNumber();
             if (index == exitNumber) {
-                std::cout << "The deck is not valid! \n";
+                std::cout << "The deck is not valid!\n";
                 return -1;
             }
 
@@ -206,21 +211,27 @@ class BlackJack : public CasinoGame {
             return "BlackJack";
         }
 
+        void cleanupGame(Player& p) {
+            p.recordResult(m_win);
+            if (m_win) {
+                awardRewards(p);
+            }
+            m_deck.resetDeck();
+        }
+
         void play(Player& p) {
             m_win = false;
             // bool coin = m_dist(m_rng); // true or false
-
             std::cout << "Welcome to BlackJack!\n";
             askBet(p);
 
             //rules.
             // dealer
-
             int dealerTotal = 0;
             int firstDealer = m_deck.drawCard();
             int secondDealer = m_deck.drawCard();
             dealerTotal += m_deck.cardValue(firstDealer);
-            // The dealer receives one card face‑up and one face‑down (the “hole” card).
+            // The Dealer receives one card face‑up and one face‑down (the “hole” card).
             dealerTotal += m_deck.cardValue(secondDealer);
             
             //player
@@ -231,34 +242,58 @@ class BlackJack : public CasinoGame {
             playerTotal += m_deck.cardValue(firstPlayer);
             playerTotal += m_deck.cardValue(secondPlayer);
 
+            std::cout << "The Dealer drew: " << m_deck.cardValue(firstDealer) << ". The other card is a mystery.\n";
+            std::cout << p.getName() << " drew: " << m_deck.cardValue(firstPlayer) << " and " << m_deck.cardValue(secondPlayer) << ".\n";
+
             while (playerTotal <= 21) {
                 // hit or stand
-                
-                std::cout << "Would you like to Hit or Stand? \n";
+                std::cout << "Your total is: " << playerTotal << ".\n";
+                std::cout << "Would you like to Hit or Stand? ";
                 char playerChoice;
                 if (!(std::cin >> playerChoice)) {
                     std::cin.clear();
                     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                     continue;
                 }
-
                 playerChoice = std::toupper(playerChoice);
                 if (playerChoice == 'H') {
                     // draw card
-                    
+                    int drawCardForPlayer = m_deck.drawCard();
+                    playerTotal += m_deck.cardValue(drawCardForPlayer);
+                    std::cout << "You chose Hit. " << p.getName() << " drew: " << m_deck.cardValue(drawCardForPlayer) << ". Your total is now: " << playerTotal << ".\n";
                 } else if (playerChoice == 'S') {
-                    // dealer picks up until they either go above your playerTotal or they bust
-
-                } else {
-                    // not H or S. break for now.
+                    std::cout << "You chose stand.\n";
                     break;
+                } else {
+                    std::cout << "Not a valid choice. Try again.\n";
                 }
             }
-            // hit = draw another card
-            // stand = end turn
+
+            if (playerTotal > 21) {
+                std::cout << "You went bust! You lose.\n";
+                cleanupGame(p);
+                return;
+            }
             
-            // until 21?
-            // m_deck.drawCard();
+            std::cout << "The other card Dealer drew was: " << m_deck.cardValue(secondDealer) << ". The Dealer has: " << dealerTotal << ".\n";
+            // dealer must pick up while 16 or below, and stand if 17 or above.
+            while (dealerTotal < 17) {
+                int drawCardForDealer = m_deck.drawCard();
+                dealerTotal += m_deck.cardValue(drawCardForDealer);
+                std::cout << "Dealer is drawing. Dealer drew: " << m_deck.cardValue(drawCardForDealer) << ". The Dealer's total is now: " << dealerTotal << ".\n";
+            }
+
+            std::cout << "The Dealer has: " << dealerTotal << ".\n";
+            std::cout << "You have: " << playerTotal << ".\n";
+            if (dealerTotal > playerTotal) {
+                std::cout << "You lose!\n";
+            } else if (dealerTotal > 21 || dealerTotal < playerTotal) {
+                std::cout << "You win!\n";
+                m_win = true;
+            } else {
+                std::cout << "Draw!\n"; // lose for now.
+            }
+            cleanupGame(p);
         }
     };
 
@@ -268,9 +303,15 @@ int main() {
     std::cout << "Your current balance is: " << player.getBalance() << '\n';
     std::cout << "Your current win rate is: " << player.getWinRatio() << "%\n";
 
-    CoinFlip c {};
+    // CoinFlip c {};
+    // while (true) {
+    //     c.play(player);
+    //     std::cout << "Your current balance is: " << player.getBalance() << '\n';
+    // }
+
+    BlackJack b {};
     while (true) {
-        c.play(player);
+        b.play(player);
         std::cout << "Your current balance is: " << player.getBalance() << '\n';
     }
 
