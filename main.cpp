@@ -160,29 +160,29 @@ class Card {
         }
 
         // i know its long,  refractor later
+        // Ace, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K.
         int cardValue(int rawCard) {
             switch (rawCard) {
-                case 0:
-                    return 1;
+                case 0:// choice of 1 or 11
+                    return 11;// hardcode 11 for now
                 case 1:
-                    // choice of 1 or 11
-                    return 1; // hardcode 1 for now
+                    return 2; 
                 case 2:
-                    return 2;
-                case 3:
                     return 3;
-                case 4:
+                case 3:
                     return 4;
-                case 5:
+                case 4:
                     return 5;
-                case 6:
+                case 5:
                     return 6;
-                case 7:
+                case 6:
                     return 7;
-                case 8:
+                case 7:
                     return 8;
-                case 9:
+                case 8:
                     return 9;
+                case 9:
+                    return 10;
                 case 10:
                     return 10;
                 case 11:
@@ -205,6 +205,10 @@ class BlackJack : public CasinoGame {
         std::mt19937 m_rng{std::random_device{}()}; // engine
         std::bernoulli_distribution m_dist{0.5}; // 50/50, need to change it to pick from a random range from 0-12.
         Card m_deck {};
+        int dealerTotal = 0;
+        int dealerNumAces = 0;
+        int playerTotal = 0;
+        int playerNumAces = 0;
 
     public:
         std::string getGameName() const {
@@ -212,11 +216,33 @@ class BlackJack : public CasinoGame {
         }
 
         void cleanupGame(Player& p) {
+            dealerTotal = 0;
+            dealerNumAces = 0;
+            playerTotal = 0;
+            playerNumAces = 0;
             p.recordResult(m_win);
             if (m_win) {
                 awardRewards(p);
             }
             m_deck.resetDeck();
+        }
+
+        bool checkIfAceValue(int value, int& numAces) {
+            if (value == 0) {
+                ++numAces;
+                return true;
+            }
+            return false;
+        }
+
+        void downgradeAce(int& total, int& numAces) {
+            // if it went bust, it shuold downgrade.
+            if (numAces >= 1) {
+                if (total >= 22) {
+                    total -= 10;
+                    --numAces;
+                }
+            }
         }
 
         void play(Player& p) {
@@ -227,23 +253,38 @@ class BlackJack : public CasinoGame {
 
             //rules.
             // dealer
-            int dealerTotal = 0;
-            int firstDealer = m_deck.drawCard();
-            int secondDealer = m_deck.drawCard();
-            dealerTotal += m_deck.cardValue(firstDealer);
-            // The Dealer receives one card face‑up and one face‑down (the “hole” card).
-            dealerTotal += m_deck.cardValue(secondDealer);
-            
-            //player
-            int playerTotal = 0;
-            // 1. draws two cards 
-            int firstPlayer = m_deck.drawCard();
-            int secondPlayer = m_deck.drawCard();
-            playerTotal += m_deck.cardValue(firstPlayer);
-            playerTotal += m_deck.cardValue(secondPlayer);
+            int firstDrawDealer = m_deck.drawCard();
+            int secondDrawDealer = m_deck.drawCard();
+                        
+            dealerTotal += m_deck.cardValue(firstDrawDealer);
+            dealerTotal += m_deck.cardValue(secondDrawDealer);
 
-            std::cout << "The Dealer drew: " << m_deck.cardValue(firstDealer) << ". The other card is a mystery.\n";
-            std::cout << p.getName() << " drew: " << m_deck.cardValue(firstPlayer) << " and " << m_deck.cardValue(secondPlayer) << ".\n";
+            // cant do or || since if both of them become ture, it would only incremenet 1, when it shuold incrememnt 2.
+            if (checkIfAceValue(firstDrawDealer, dealerNumAces)) {
+                downgradeAce(dealerTotal, dealerNumAces);
+            } 
+            
+            if (checkIfAceValue(secondDrawDealer, dealerNumAces)) {
+                downgradeAce(dealerTotal, dealerNumAces);
+            }
+
+            //player
+            int firstDrawPlayer = m_deck.drawCard();
+            int secondDrawPlayer = m_deck.drawCard();
+            playerTotal += m_deck.cardValue(firstDrawPlayer);
+            playerTotal += m_deck.cardValue(secondDrawPlayer);
+
+            if (checkIfAceValue(firstDrawPlayer, playerNumAces)) {
+                downgradeAce(playerTotal, playerNumAces);
+            } 
+            
+            if (checkIfAceValue(secondDrawPlayer, playerNumAces)) {
+                downgradeAce(playerTotal, playerNumAces);
+            }
+             
+
+            std::cout << "The Dealer drew: " << m_deck.cardValue(firstDrawDealer) << ". The other card is a mystery.\n";
+            std::cout << p.getName() << " drew: " << m_deck.cardValue(firstDrawPlayer) << " and " << m_deck.cardValue(secondDrawPlayer) << ".\n";
 
             while (playerTotal <= 21) {
                 // hit or stand
@@ -260,7 +301,12 @@ class BlackJack : public CasinoGame {
                     // draw card
                     int drawCardForPlayer = m_deck.drawCard();
                     playerTotal += m_deck.cardValue(drawCardForPlayer);
+                    if (checkIfAceValue(drawCardForPlayer, playerNumAces)) {
+                        downgradeAce(playerTotal, playerNumAces);
+                    }
+
                     std::cout << "You chose Hit. " << p.getName() << " drew: " << m_deck.cardValue(drawCardForPlayer) << ". Your total is now: " << playerTotal << ".\n";
+                    
                 } else if (playerChoice == 'S') {
                     std::cout << "You chose stand.\n";
                     break;
@@ -275,11 +321,14 @@ class BlackJack : public CasinoGame {
                 return;
             }
             
-            std::cout << "The other card Dealer drew was: " << m_deck.cardValue(secondDealer) << ". The Dealer has: " << dealerTotal << ".\n";
+            std::cout << "The other card Dealer drew was: " << m_deck.cardValue(secondDrawDealer) << ". The Dealer has: " << dealerTotal << ".\n";
             // dealer must pick up while 16 or below, and stand if 17 or above.
             while (dealerTotal < 17) {
                 int drawCardForDealer = m_deck.drawCard();
                 dealerTotal += m_deck.cardValue(drawCardForDealer);
+                if (checkIfAceValue(drawCardForDealer, dealerNumAces)) {
+                    downgradeAce(dealerTotal, dealerNumAces);
+                }
                 std::cout << "Dealer is drawing. Dealer drew: " << m_deck.cardValue(drawCardForDealer) << ". The Dealer's total is now: " << dealerTotal << ".\n";
             }
 
