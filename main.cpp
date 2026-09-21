@@ -245,6 +245,10 @@ class BlackJack : public CasinoGame {
             }
         }
 
+        bool checkNaturalBlackJack(int v1, int v2) {
+            return ((v1 + v2) == 21);
+        }
+
         void play(Player& p) {
             m_win = false;
             // bool coin = m_dist(m_rng); // true or false
@@ -281,10 +285,28 @@ class BlackJack : public CasinoGame {
             if (checkIfAceValue(secondDrawPlayer, playerNumAces)) {
                 downgradeAce(playerTotal, playerNumAces);
             }
-             
+            
+            if (checkNaturalBlackJack(m_deck.cardValue(firstDrawDealer), m_deck.cardValue(secondDrawDealer))) {
+                if (checkNaturalBlackJack(m_deck.cardValue(firstDrawPlayer), m_deck.cardValue(secondDrawPlayer))) { 
+                    std::cout << "The Dealer drew: " << m_deck.cardValue(firstDrawDealer) << " and " << m_deck.cardValue(secondDrawDealer) << ", meaning the dealer has: " << dealerTotal << "\n";
+                    std::cout << "You drew: " << m_deck.cardValue(firstDrawPlayer) << " and " << m_deck.cardValue(secondDrawPlayer) << ", meaning your total now is: " << playerTotal << ". You drew!\n";
+                    cleanupGame(p);
+                    return;
+                }
+                std::cout << "The Dealer drew: " << m_deck.cardValue(firstDrawDealer) << " and " << m_deck.cardValue(secondDrawDealer) << ", meaning he has blackjack. You lose!\n";
+                cleanupGame(p);
+                return;
+            }
 
             std::cout << "The Dealer drew: " << m_deck.cardValue(firstDrawDealer) << ". The other card is a mystery.\n";
             std::cout << p.getName() << " drew: " << m_deck.cardValue(firstDrawPlayer) << " and " << m_deck.cardValue(secondDrawPlayer) << ".\n";
+
+            if (checkNaturalBlackJack(m_deck.cardValue(firstDrawPlayer), m_deck.cardValue(secondDrawPlayer))) {
+                std::cout << "You drew: " << m_deck.cardValue(firstDrawPlayer) << " and " << m_deck.cardValue(secondDrawPlayer) << ", meaning your total now is: " << playerTotal << ". You win!\n";
+                m_win = true;
+                cleanupGame(p);
+                return;
+            }
 
             while (playerTotal <= 21) {
                 // hit or stand
