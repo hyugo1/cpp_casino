@@ -10,7 +10,7 @@
 
 namespace Utils {
     template <typename T>
-    bool Utils::tryRead(T& value) {
+    bool tryRead(T& value) {
         if (!(std::cin >> value)) {
             std::cin.clear();
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -32,6 +32,7 @@ class Player {
         Player(std::string name="Guest", int bal=100, int games_played=0, int wins=0) : m_name{name}, m_bal {bal}, m_total_games_played {games_played}, m_wins {wins} {};
 
         const std::string_view getName() const { return m_name; }
+        void setName(const std::string& name) {m_name = name;}
         int getBalance() const { return m_bal; }
         double getWinRatio() const { 
             if (m_total_games_played == 0) return 0.0;
@@ -50,11 +51,16 @@ class Player {
 class CasinoGame {
     public:
         virtual void play(Player& p) = 0;
-        virtual void cleanupGame(Player& p) = 0;
+        virtual void cleanupGame() {};
         virtual std::string getGameName() const = 0;
         virtual ~CasinoGame() = default;
-        int m_bet_amount {std::numeric_limits<int>::max()};
-        int m_multiplier {3};
+        
+        enum class Outcome { PlayerBust, DealerBust, PlayerNatural, DealerNatural, Draw, PlayerWin, PlayerLose };
+        
+    private:
+        bool m_win {false};
+        bool m_draw {false};
+        int m_bet_amount {0};
 
     protected:
         void askBet(Player& p) {
@@ -67,34 +73,77 @@ class CasinoGame {
             } while (m_bet_amount > p.getBalance() || m_bet_amount <= 0);
             std::cout << "Betted: " << m_bet_amount << '\n';
             p.subFromBalance(m_bet_amount);
-
         }
 
         void awardRewards(Player& p) {
-            p.addToBalance(m_bet_amount * m_multiplier);
+            p.addToBalance(m_bet_amount * 2);
+        }
+
+        void refundBet(Player& p) {
+            p.addToBalance(m_bet_amount);
+        }
+
+        void resolveOutcome(Outcome result, Player& p) {
+            m_win = false;
+            m_draw = false;
+            switch(result) {
+                case Outcome::DealerBust:
+                    std::cout << "The Dealer went bust! You win!\n";
+                    m_win = true;
+                    break;
+                case Outcome::DealerNatural:
+                    std::cout << "The Dealer got blackjack in the first two cards. You lose.\n";
+                    m_win = false;
+                    break;
+                case Outcome::PlayerLose:
+                    std::cout << "You lose.\n";
+                    m_win = false;
+                    break;
+                case Outcome::Draw:
+                    std::cout << "Its a draw.\n";
+                    m_win = false;
+                    m_draw = true;
+                    break;
+                case Outcome::PlayerBust:
+                    std::cout << "You went bust. You lose.\n";
+                    m_win = false;
+                    break;
+                case Outcome::PlayerNatural:
+                    std::cout << "You got blackjack in the first two cards. You win!\n";
+                    m_win = true;
+                    break;
+                case Outcome::PlayerWin:
+                    std::cout << "You win!\n";
+                    m_win = true;
+                    break;
+            }
+            if (!m_draw) {
+                p.recordResult(m_win);
+            }
+            if (m_win) {
+                awardRewards(p);
+            } else if (m_draw) {
+                refundBet(p);
+            }
+
+            cleanupGame();
         }
 };
 
 class CoinFlip : public CasinoGame {
     private:
-        bool m_win {false};
         std::mt19937 m_rng{std::random_device{}()}; // engine
         std::bernoulli_distribution m_dist{0.5};// 50/50
         
     public:
-        std::string getGameName() const {
+        std::string getGameName() const override {
             return "CoinFlip";
         }
 
-        void cleanupGame(Player& p) {
-             p.recordResult(m_win);
-            if (m_win) {
-                awardRewards(p);
-            }
+        void cleanupGame() override {
         }
 
-        void play(Player& p) {
-            m_win = false;
+        void play(Player& p) override {
             bool coin = m_dist(m_rng); // true or false
             char bot_decision = coin ? 'H' : 'T';
 
@@ -115,13 +164,10 @@ class CoinFlip : public CasinoGame {
             }
 
             if (guess == bot_decision) {
-                m_win = true;
-                std::cout << "You win!\n";
+                resolveOutcome(Outcome::PlayerWin, p);
             } else {
-                std::cout << "You lose! It was " << bot_decision << "\n";
+                resolveOutcome(Outcome::PlayerLose, p);
             }
-            
-            cleanupGame(p);
         }
 };
 
@@ -162,36 +208,14 @@ class Card {
             return temp;
         }
 
-        // i know its long,  refractor later
         // Ace, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K.
-        int cardValue(int rawCard) {
-            switch (rawCard) {
-                case 0:// choice of 1 or 11
-                    return 11;// hardcode 11 for now
-                case 1:
-                    return 2; 
-                case 2:
-                    return 3;
-                case 3:
-                    return 4;
-                case 4:
-                    return 5;
-                case 5:
-                    return 6;
-                case 6:
-                    return 7;
-                case 7:
-                    return 8;
-                case 8:
-                    return 9;
-                case 9:
-                    return 10;
-                case 10:
-                    return 10;
-                case 11:
-                    return 10;
-                case 12:
-                    return 10;
+        int blackjackCardValue(int rawCard) {
+            if (rawCard == 0) {
+                return 11;
+            } else if (rawCard >= 10) {
+                return 10;
+            } else {
+                return rawCard + 1;
             }
             return -1;
         }
@@ -203,38 +227,27 @@ class Card {
 
 class BlackJack : public CasinoGame {
     private:
-        bool m_win {false};
-        bool m_draw {false}; //fix later
-        // random         
-        std::mt19937 m_rng{std::random_device{}()}; // engine
-        std::bernoulli_distribution m_dist{0.5}; // 50/50, need to change it to pick from a random range from 0-12.
         Card m_deck {};
         int dealerTotal = 0;
         int dealerNumAces = 0;
         int playerTotal = 0;
         int playerNumAces = 0;
-        
-        enum class Outcome { PlayerBust, DealerBust, PlayerNatural, DealerNatural, Draw, PlayerWin, DealerWin };
 
     public:
-        std::string getGameName() const {
+        std::string getGameName() const override {
             return "BlackJack";
         }
 
-        void cleanupGame(Player& p) {
+        void cleanupGame() override {
             dealerTotal = 0;
             dealerNumAces = 0;
             playerTotal = 0;
             playerNumAces = 0;
-            p.recordResult(m_win);
-            if (m_win) {
-                awardRewards(p);
-            }
             m_deck.resetDeck();
         }
 
-        bool checkIfAceValue(int value, int& numAces) {
-            if (value == 0) {
+        bool isAce(int rawCard, int& numAces) {
+            if (rawCard == 0) {
                 ++numAces;
                 return true;
             }
@@ -244,53 +257,18 @@ class BlackJack : public CasinoGame {
         void downgradeAce(int& total, int& numAces) {
             // if it went bust, it shuold downgrade.
             if (numAces >= 1) {
-                if (total >= 22) {
+                while (total > 21 && numAces > 0) {
                     total -= 10;
                     --numAces;
                 }
             }
         }
 
-        bool checkNaturalBlackJack(int v1, int v2) {
-            return ((v1 + v2) == 21);
+        void addToDeckTotal(int& total, int rawCard) {
+            total += m_deck.blackjackCardValue(rawCard);
         }
 
-        void resolveOutcome(Outcome result, Player& p) {
-            switch(result) {
-                case Outcome::DealerBust:
-                    std::cout << "The Dealer went bust! You win!\n";
-                    m_win = true;
-                    break;
-                case Outcome::DealerNatural:
-                    std::cout << "The Dealer got blackjack in the first two cards. You lose.\n";
-                    m_win = false;
-                    break;
-                case Outcome::DealerWin:
-                    std::cout << "You lose.\n";
-                    m_win = false;
-                    break;
-                case Outcome::Draw:
-                    std::cout << "Its a draw.\n";
-                    m_draw = true;
-                    break;
-                case Outcome::PlayerBust:
-                    std::cout << "You went bust. You lose.\n";
-                    m_win = false;
-                    break;
-                case Outcome::PlayerNatural:
-                    std::cout << "You got blackjack in the first two cards. You win!\n";
-                    m_win = true;
-                    break;
-                case Outcome::PlayerWin:
-                    std::cout << "You win!\n";
-                    m_win = true;
-                    break;
-            }
-            cleanupGame(p);
-        }
-
-        void play(Player& p) {
-            m_win = false;
+        void play(Player& p) override {
             Outcome result;
             std::cout << "Welcome to BlackJack!\n";
             askBet(p);
@@ -299,30 +277,30 @@ class BlackJack : public CasinoGame {
             // dealer
             int firstDrawDealer = m_deck.drawCard();
             int secondDrawDealer = m_deck.drawCard();
-                        
-            dealerTotal += m_deck.cardValue(firstDrawDealer);
-            dealerTotal += m_deck.cardValue(secondDrawDealer);
+            
+            addToDeckTotal(dealerTotal, firstDrawDealer);
+            addToDeckTotal(dealerTotal, secondDrawDealer);
 
             // cant do or || since if both of them become ture, it would only incremenet 1, when it shuold incrememnt 2.
-            if (checkIfAceValue(firstDrawDealer, dealerNumAces)) {
+            if (isAce(firstDrawDealer, dealerNumAces)) {
                 downgradeAce(dealerTotal, dealerNumAces);
             } 
             
-            if (checkIfAceValue(secondDrawDealer, dealerNumAces)) {
+            if (isAce(secondDrawDealer, dealerNumAces)) {
                 downgradeAce(dealerTotal, dealerNumAces);
             }
 
             //player
             int firstDrawPlayer = m_deck.drawCard();
             int secondDrawPlayer = m_deck.drawCard();
-            playerTotal += m_deck.cardValue(firstDrawPlayer);
-            playerTotal += m_deck.cardValue(secondDrawPlayer);
+            addToDeckTotal(playerTotal, firstDrawPlayer);
+            addToDeckTotal(playerTotal, secondDrawPlayer);
 
-            if (checkIfAceValue(firstDrawPlayer, playerNumAces)) {
+            if (isAce(firstDrawPlayer, playerNumAces)) {
                 downgradeAce(playerTotal, playerNumAces);
             } 
             
-            if (checkIfAceValue(secondDrawPlayer, playerNumAces)) {
+            if (isAce(secondDrawPlayer, playerNumAces)) {
                 downgradeAce(playerTotal, playerNumAces);
             }
 
@@ -336,8 +314,8 @@ class BlackJack : public CasinoGame {
                 return;
             }
 
-            std::cout << "The Dealer drew: " << m_deck.cardValue(firstDrawDealer) << ". The other card is a mystery.\n";
-            std::cout << p.getName() << " drew: " << m_deck.cardValue(firstDrawPlayer) << " and " << m_deck.cardValue(secondDrawPlayer) << ".\n";
+            std::cout << "The Dealer drew: " << m_deck.blackjackCardValue(firstDrawDealer) << ". The other card is a mystery.\n";
+            std::cout << p.getName() << " drew: " << m_deck.blackjackCardValue(firstDrawPlayer) << " and " << m_deck.blackjackCardValue(secondDrawPlayer) << ".\n";
 
             if (playerTotal == 21) {
                 result = Outcome::PlayerNatural;
@@ -355,12 +333,12 @@ class BlackJack : public CasinoGame {
                 if (playerChoice == 'H') {
                     // draw card
                     int drawCardForPlayer = m_deck.drawCard();
-                    playerTotal += m_deck.cardValue(drawCardForPlayer);
-                    if (checkIfAceValue(drawCardForPlayer, playerNumAces)) {
+                    addToDeckTotal(playerTotal, drawCardForPlayer);
+                    if (isAce(drawCardForPlayer, playerNumAces)) {
                         downgradeAce(playerTotal, playerNumAces);
                     }
 
-                    std::cout << "You chose Hit. " << p.getName() << " drew: " << m_deck.cardValue(drawCardForPlayer) << ". Your total is now: " << playerTotal << ".\n";
+                    std::cout << "You chose Hit. " << p.getName() << " drew: " << m_deck.blackjackCardValue(drawCardForPlayer) << ". Your total is now: " << playerTotal << ".\n";
                     
                 } else if (playerChoice == 'S') {
                     std::cout << "You chose stand.\n";
@@ -376,15 +354,15 @@ class BlackJack : public CasinoGame {
                 return;
             }
             
-            std::cout << "The other card Dealer drew was: " << m_deck.cardValue(secondDrawDealer) << ". The Dealer has: " << dealerTotal << ".\n";
+            std::cout << "The other card Dealer drew was: " << m_deck.blackjackCardValue(secondDrawDealer) << ". The Dealer has: " << dealerTotal << ".\n";
             // dealer must pick up while 16 or below, and stand if 17 or above.
             while (dealerTotal < 17) {
                 int drawCardForDealer = m_deck.drawCard();
-                dealerTotal += m_deck.cardValue(drawCardForDealer);
-                if (checkIfAceValue(drawCardForDealer, dealerNumAces)) {
+                addToDeckTotal(dealerTotal, drawCardForDealer);
+                if (isAce(drawCardForDealer, dealerNumAces)) {
                     downgradeAce(dealerTotal, dealerNumAces);
                 }
-                std::cout << "Dealer is drawing. Dealer drew: " << m_deck.cardValue(drawCardForDealer) << ". The Dealer's total is now: " << dealerTotal << ".\n";
+                std::cout << "Dealer is drawing. Dealer drew: " << m_deck.blackjackCardValue(drawCardForDealer) << ". The Dealer's total is now: " << dealerTotal << ".\n";
             }
 
             std::cout << "The Dealer has: " << dealerTotal << ".\n";
@@ -392,7 +370,7 @@ class BlackJack : public CasinoGame {
             if (dealerTotal > 21) {
                 result = Outcome::DealerBust;
             } else if (dealerTotal > playerTotal) {
-                result = Outcome::DealerWin;
+                result = Outcome::PlayerLose;
             } else if (dealerTotal < playerTotal) {
                 result = Outcome::PlayerWin;
             } else {
@@ -404,7 +382,13 @@ class BlackJack : public CasinoGame {
     };
 
 int main() { 
-    Player player {};
+    Player player{};
+    
+    std::string name;
+    std::cout << "Enter your name: ";
+    std::getline(std::cin, name);
+    player.setName(name);
+
     std::cout << "Hello, " << player.getName() << "!\n";
     std::cout << "Your current balance is: " << player.getBalance() << '\n';
     std::cout << "Your current win rate is: " << player.getWinRatio() << "%\n";
