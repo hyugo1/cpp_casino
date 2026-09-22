@@ -6,7 +6,7 @@
 #include <random>
 #include <vector>
 #include <unordered_set>
-#include <random>
+#include <memory>
 
 class Player {
     private:
@@ -409,16 +409,39 @@ int main() {
     std::cout << "Hello, " << player.getName() << "!\n";
     std::cout << "Your current balance is: " << player.getBalance() << '\n';
     std::cout << "Your current win rate is: " << player.getWinRatio() << "%\n";
-
-    // CoinFlip c {};
-    // while (true) {
-    //     c.play(player);
-    //     std::cout << "Your current balance is: " << player.getBalance() << '\n';
-    // }
-
-    BlackJack b {};
+    
+    std::vector<std::unique_ptr<CasinoGame>> games;
+    games.push_back(std::make_unique<CoinFlip>());
+    games.push_back(std::make_unique<BlackJack>());
+    
+    
     while (true) {
-        b.play(player);
+        std::cout << "What would you like to play?\n";
+        std::cout << "---------------------------------------\n";
+        
+        std::cout << "0: Quit\n";
+        for (size_t i = 0; i < games.size(); ++i) {
+            std::cout <<  i+1 << ": " << games[i]->getGameName() << '\n';
+        }
+
+        int selection {};
+        if (!(std::cin >> selection)) {
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            continue;
+        }
+
+        if (selection == 0) {
+            std::cout << "Thanks for playing!\n";
+            return 0;
+        }
+
+        if (selection < 1 || selection > static_cast<int>(games.size())) {
+            std::cout << "Not a valid entry. Try again!\n";
+            continue;
+        }
+
+        games[selection - 1]->play(player);
         std::cout << "Your current balance is: " << player.getBalance() << '\n';
     }
 
