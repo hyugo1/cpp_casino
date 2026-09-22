@@ -8,6 +8,18 @@
 #include <unordered_set>
 #include <memory>
 
+namespace Utils {
+    template <typename T>
+    bool Utils::tryRead(T& value) {
+        if (!(std::cin >> value)) {
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return false;
+        }
+        return true;
+    }
+}
+
 class Player {
     private:
         std::string m_name {};
@@ -48,12 +60,7 @@ class CasinoGame {
         void askBet(Player& p) {
             do {
                 std::cout << "How much are you betting? "; 
-                if (!(std::cin >> m_bet_amount)) {
-                    std::cout << "Invalid input. Please enter a number.\n";
-                    std::cin.clear(); 
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); 
-                    continue;
-                }
+                if (!Utils::tryRead(m_bet_amount)) {continue; }
                 if (m_bet_amount > p.getBalance()) {
                     std::cout << "You can't afford that. Try again\n";
                 }
@@ -97,11 +104,7 @@ class CoinFlip : public CasinoGame {
             char guess;
             while (true) {
                 std::cout << "Heads or Tails? Type H or T.\n";
-                if (!(std::cin >> guess)) {
-                    std::cin.clear();
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                    continue;
-                }
+                if (!Utils::tryRead(guess)) {continue;}
 
                 guess = std::toupper(guess);
                 if (guess == 'T' || guess == 'H') {
@@ -347,11 +350,7 @@ class BlackJack : public CasinoGame {
                 std::cout << "Your total is: " << playerTotal << ".\n";
                 std::cout << "Would you like to Hit or Stand? ";
                 char playerChoice;
-                if (!(std::cin >> playerChoice)) {
-                    std::cin.clear();
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                    continue;
-                }
+                if (!Utils::tryRead(playerChoice)) {continue;}
                 playerChoice = std::toupper(playerChoice);
                 if (playerChoice == 'H') {
                     // draw card
@@ -425,11 +424,7 @@ int main() {
         }
 
         int selection {};
-        if (!(std::cin >> selection)) {
-            std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            continue;
-        }
+        if (!Utils::tryRead(selection)) { continue; }
 
         if (selection == 0) {
             std::cout << "Thanks for playing!\n";
