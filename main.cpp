@@ -1,11 +1,9 @@
 #include <iostream>
 #include <string>
 #include <limits>
-#include <cassert>
 #include <cctype>
 #include <random>
 #include <vector>
-#include <unordered_set>
 #include <memory>
 
 namespace Utils {
@@ -171,16 +169,43 @@ class CoinFlip : public CasinoGame {
         }
 };
 
+
+struct PlayingCard {
+    int rank; // 0-12
+    int suit; // 0-3
+};
+
+std::ostream& operator<<(std::ostream& os, const PlayingCard& card) {
+    static const std::string ranks[] {
+        "Ace", "2", "3", "4", "5", "6", "7",
+        "8", "9", "10", "Jack", "Queen", "King"
+    };
+
+    static const std::string suits[] {
+        "Spades", "Hearts", "Diamonds", "Clubs"
+    };
+
+    if (card.rank < 0 || card.rank > 12 ||
+        card.suit < 0 || card.suit > 3) {
+        os << "Invalid Card";
+        return os;
+    }
+
+    os << ranks[card.rank] << " of " << suits[card.suit];
+    return os;
+}
 class Card {
     private:
-        std::vector<int> m_deck {0,1,2,3,4,5,6,7,8,9,10,11,12}; // jack, queen, king is all 10, Ace = 1 or 11 in blackjack.
-        std::vector<int> m_suits {1,2,3,4};//clubs, spades, hearts, diamonds. // TODO: deal with later
+        // rank: 0-12, suit: 0-3
+        std::vector<PlayingCard> m_deck {  buildFullDeck() };
+
+        // jack, queen, king is all 10, Ace = 1 or 11 in blackjack.
         std::random_device rd;
         std::mt19937 gen{ rd() };
         const int exitNumber = 999;
 
     public:
-        int getRandomCardNumber() {
+        int getRandomCard() {
             // 1. Define the distribution range based on the vector's indices
             // uniform_int_distribution is inclusive: [0, numbers.size() - 1]
             // assert(m_deck.size() > 0);
@@ -196,34 +221,34 @@ class Card {
             return random_index;
         }
 
-        int drawCard() {
-            int index = getRandomCardNumber();
+        PlayingCard drawCard() {
+            int index = getRandomCard();
             if (index == exitNumber) {
                 std::cout << "The deck is not valid!\n";
-                return -1;
+                return {-1, -1};
             }
 
-            int temp = m_deck[index]; //save card before deleting it
+            int ranks = m_deck[index].rank; //save card before deleting it
+            int suits = m_deck[index].suit; //save card suit before deleting it
             m_deck.erase(m_deck.begin() + index);
-            return temp;
+            return {ranks, suits};
         }
 
-        // Ace, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K.
-        int blackjackCardValue(int rawCard) {
-            if (rawCard == 0) {
-                return 11;
-            } else if (rawCard >= 10) {
-                return 10;
-            } else {
-                return rawCard + 1;
+        std::vector<PlayingCard> buildFullDeck() {
+            std::vector<PlayingCard> deck;
+            for (int j {0}; j < 4; ++j) {
+                for (int i {0}; i < 13; ++i) {
+                    deck.push_back({i, j});
+                }
             }
-            return -1;
+            return deck;
         }
 
         void resetDeck() {
-            m_deck = {0,1,2,3,4,5,6,7,8,9,10,11,12};
+            m_deck = buildFullDeck();
         }
 };
+
 
 class BlackJack : public CasinoGame {
     private:
@@ -246,8 +271,8 @@ class BlackJack : public CasinoGame {
             m_deck.resetDeck();
         }
 
-        bool isAce(int rawCard, int& numAces) {
-            if (rawCard == 0) {
+        bool isAce(PlayingCard card, int& numAces) {
+            if (card.rank == 0) {
                 ++numAces;
                 return true;
             }
@@ -264,8 +289,20 @@ class BlackJack : public CasinoGame {
             }
         }
 
-        void addToDeckTotal(int& total, int rawCard) {
-            total += m_deck.blackjackCardValue(rawCard);
+        // Ace, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K.
+        int getCardValue(PlayingCard card) {
+            if (card.rank == 0) {
+                return 11;
+            } else if (card.rank >= 10) {
+                return 10;
+            } else {
+                return card.rank + 1;
+            }
+            return -1;
+        }
+
+        void addToDeckTotal(int& total, PlayingCard card) {
+            total += getCardValue(card);
         }
 
         void play(Player& p) override {
@@ -275,8 +312,8 @@ class BlackJack : public CasinoGame {
 
             //rules.
             // dealer
-            int firstDrawDealer = m_deck.drawCard();
-            int secondDrawDealer = m_deck.drawCard();
+            PlayingCard firstDrawDealer = m_deck.drawCard();
+            PlayingCard secondDrawDealer = m_deck.drawCard();
             
             addToDeckTotal(dealerTotal, firstDrawDealer);
             addToDeckTotal(dealerTotal, secondDrawDealer);
@@ -291,8 +328,8 @@ class BlackJack : public CasinoGame {
             }
 
             //player
-            int firstDrawPlayer = m_deck.drawCard();
-            int secondDrawPlayer = m_deck.drawCard();
+            PlayingCard firstDrawPlayer = m_deck.drawCard();
+            PlayingCard secondDrawPlayer = m_deck.drawCard();
             addToDeckTotal(playerTotal, firstDrawPlayer);
             addToDeckTotal(playerTotal, secondDrawPlayer);
 
@@ -314,8 +351,8 @@ class BlackJack : public CasinoGame {
                 return;
             }
 
-            std::cout << "The Dealer drew: " << m_deck.blackjackCardValue(firstDrawDealer) << ". The other card is a mystery.\n";
-            std::cout << p.getName() << " drew: " << m_deck.blackjackCardValue(firstDrawPlayer) << " and " << m_deck.blackjackCardValue(secondDrawPlayer) << ".\n";
+            std::cout << "The Dealer drew: " << firstDrawDealer  << ". The other card is a mystery.\n";
+            std::cout << p.getName() << " drew: " << firstDrawPlayer << " and " << secondDrawPlayer << ".\n";
 
             if (playerTotal == 21) {
                 result = Outcome::PlayerNatural;
@@ -332,13 +369,13 @@ class BlackJack : public CasinoGame {
                 playerChoice = std::toupper(playerChoice);
                 if (playerChoice == 'H') {
                     // draw card
-                    int drawCardForPlayer = m_deck.drawCard();
+                    PlayingCard drawCardForPlayer = m_deck.drawCard();
                     addToDeckTotal(playerTotal, drawCardForPlayer);
                     if (isAce(drawCardForPlayer, playerNumAces)) {
                         downgradeAce(playerTotal, playerNumAces);
                     }
 
-                    std::cout << "You chose Hit. " << p.getName() << " drew: " << m_deck.blackjackCardValue(drawCardForPlayer) << ". Your total is now: " << playerTotal << ".\n";
+                    std::cout << "You chose Hit. " << p.getName() << " drew: " << drawCardForPlayer << ". Your total is now: " << playerTotal << ".\n";
                     
                 } else if (playerChoice == 'S') {
                     std::cout << "You chose stand.\n";
@@ -354,15 +391,15 @@ class BlackJack : public CasinoGame {
                 return;
             }
             
-            std::cout << "The other card Dealer drew was: " << m_deck.blackjackCardValue(secondDrawDealer) << ". The Dealer has: " << dealerTotal << ".\n";
+            std::cout << "The other card Dealer drew was: " << secondDrawDealer << ". The Dealer has: " << dealerTotal << ".\n";
             // dealer must pick up while 16 or below, and stand if 17 or above.
             while (dealerTotal < 17) {
-                int drawCardForDealer = m_deck.drawCard();
+                PlayingCard drawCardForDealer = m_deck.drawCard();
                 addToDeckTotal(dealerTotal, drawCardForDealer);
                 if (isAce(drawCardForDealer, dealerNumAces)) {
                     downgradeAce(dealerTotal, dealerNumAces);
                 }
-                std::cout << "Dealer is drawing. Dealer drew: " << m_deck.blackjackCardValue(drawCardForDealer) << ". The Dealer's total is now: " << dealerTotal << ".\n";
+                std::cout << "Dealer is drawing. Dealer drew: " << drawCardForDealer << ". The Dealer's total is now: " << dealerTotal << ".\n";
             }
 
             std::cout << "The Dealer has: " << dealerTotal << ".\n";
