@@ -208,7 +208,6 @@ class Card {
         int getRandomCard() {
             // 1. Define the distribution range based on the vector's indices
             // uniform_int_distribution is inclusive: [0, numbers.size() - 1]
-            // assert(m_deck.size() > 0);
             if (m_deck.size() <= 0) {
                 return exitNumber;
             }
@@ -249,7 +248,6 @@ class Card {
         }
 };
 
-
 class BlackJack : public CasinoGame {
     private:
         Card m_deck {};
@@ -271,24 +269,6 @@ class BlackJack : public CasinoGame {
             m_deck.resetDeck();
         }
 
-        bool isAce(PlayingCard card, int& numAces) {
-            if (card.rank == 0) {
-                ++numAces;
-                return true;
-            }
-            return false;
-        }
-
-        void downgradeAce(int& total, int& numAces) {
-            // if it went bust, it shuold downgrade.
-            if (numAces >= 1) {
-                while (total > 21 && numAces > 0) {
-                    total -= 10;
-                    --numAces;
-                }
-            }
-        }
-
         // Ace, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K.
         int getCardValue(PlayingCard card) {
             if (card.rank == 0) {
@@ -301,8 +281,18 @@ class BlackJack : public CasinoGame {
             return -1;
         }
 
-        void addToDeckTotal(int& total, PlayingCard card) {
+        void addCard(int& total, int& numAces, PlayingCard card) {
             total += getCardValue(card);
+
+            if (card.rank == 0) {
+                ++numAces;
+            }
+
+            //downgrade ace
+            while (total > 21 && numAces > 0) {
+                total -= 10;
+                --numAces;
+            }
         }
 
         void play(Player& p) override {
@@ -315,31 +305,15 @@ class BlackJack : public CasinoGame {
             PlayingCard firstDrawDealer = m_deck.drawCard();
             PlayingCard secondDrawDealer = m_deck.drawCard();
             
-            addToDeckTotal(dealerTotal, firstDrawDealer);
-            addToDeckTotal(dealerTotal, secondDrawDealer);
-
-            // cant do or || since if both of them become ture, it would only incremenet 1, when it shuold incrememnt 2.
-            if (isAce(firstDrawDealer, dealerNumAces)) {
-                downgradeAce(dealerTotal, dealerNumAces);
-            } 
-            
-            if (isAce(secondDrawDealer, dealerNumAces)) {
-                downgradeAce(dealerTotal, dealerNumAces);
-            }
+            addCard(dealerTotal, dealerNumAces, firstDrawDealer);
+            addCard(dealerTotal, dealerNumAces, secondDrawDealer);
 
             //player
             PlayingCard firstDrawPlayer = m_deck.drawCard();
             PlayingCard secondDrawPlayer = m_deck.drawCard();
-            addToDeckTotal(playerTotal, firstDrawPlayer);
-            addToDeckTotal(playerTotal, secondDrawPlayer);
 
-            if (isAce(firstDrawPlayer, playerNumAces)) {
-                downgradeAce(playerTotal, playerNumAces);
-            } 
-            
-            if (isAce(secondDrawPlayer, playerNumAces)) {
-                downgradeAce(playerTotal, playerNumAces);
-            }
+            addCard(playerTotal, playerNumAces, firstDrawPlayer);
+            addCard(playerTotal, playerNumAces, secondDrawPlayer);
 
             if (dealerTotal == 21 && playerTotal == 21) {
                 result = Outcome::Draw;
@@ -370,10 +344,7 @@ class BlackJack : public CasinoGame {
                 if (playerChoice == 'H') {
                     // draw card
                     PlayingCard drawCardForPlayer = m_deck.drawCard();
-                    addToDeckTotal(playerTotal, drawCardForPlayer);
-                    if (isAce(drawCardForPlayer, playerNumAces)) {
-                        downgradeAce(playerTotal, playerNumAces);
-                    }
+                    addCard(playerTotal, playerNumAces, drawCardForPlayer);
 
                     std::cout << "You chose Hit. " << p.getName() << " drew: " << drawCardForPlayer << ". Your total is now: " << playerTotal << ".\n";
                     
@@ -395,10 +366,8 @@ class BlackJack : public CasinoGame {
             // dealer must pick up while 16 or below, and stand if 17 or above.
             while (dealerTotal < 17) {
                 PlayingCard drawCardForDealer = m_deck.drawCard();
-                addToDeckTotal(dealerTotal, drawCardForDealer);
-                if (isAce(drawCardForDealer, dealerNumAces)) {
-                    downgradeAce(dealerTotal, dealerNumAces);
-                }
+                addCard(dealerTotal, dealerNumAces, drawCardForDealer);
+
                 std::cout << "Dealer is drawing. Dealer drew: " << drawCardForDealer << ". The Dealer's total is now: " << dealerTotal << ".\n";
             }
 
