@@ -1,2 +1,7 @@
 /.vscode
 main
+
+build/
+main.dSYM/Contents/Info.plist
+main.dSYM/Contents/Resources/Relocations/aarch64/main.yml
+todo.txt
