@@ -5,6 +5,7 @@
 #include <random>
 #include <vector>
 #include <memory>
+#include <array>
 
 namespace Utils {
     template <typename T>
@@ -21,28 +22,45 @@ namespace Utils {
 class Player {
     private:
         std::string m_name {};
-        int m_bal {100};
+        double m_bal {100};
         int m_total_games_played {0};
         int m_wins {0};
         int m_losses {0};
+        std::vector<std::string> difficultyLevel {"easy", "medium", "hard"};
+        int m_difficulty {4};
 
     public:
-        Player(std::string name="Guest", int bal=100, int games_played=0, int wins=0) : m_name{name}, m_bal {bal}, m_total_games_played {games_played}, m_wins {wins} {};
+        Player(std::string name="Guest", double bal=100.0, int games_played=0, int wins=0) : m_name{name}, m_bal {bal}, m_total_games_played {games_played}, m_wins {wins} {};
 
         const std::string_view getName() const { return m_name; }
         void setName(const std::string& name) {m_name = name;}
-        int getBalance() const { return m_bal; }
+        double getBalance() const { return m_bal; }
         double getWinRatio() const { 
             if (m_total_games_played == 0) return 0.0;
             return (static_cast<double>(m_wins) / m_total_games_played) * 100;
         }
 
-        void addToBalance(int amount) { m_bal += amount; }
-        void subFromBalance(int amount) { m_bal -= amount; }
+        void addToBalance(double amount) { m_bal += amount; }
+        void subFromBalance(double amount) { m_bal -= amount; }
         void recordResult(bool won) {
             if (won) { ++m_wins; }
             else { ++m_losses; }
             ++m_total_games_played;
+        }
+
+        void askDifficulty() {
+            int choice {};
+            do {
+                std::cout << "What difficulty would you like?\n";
+                std::cout << "1: Easy 2: Medium or 3: Hard? Enter number: ";
+                if (!Utils::tryRead(choice)) {continue; }
+            } while (choice < 1 || choice > 3);
+            m_difficulty = choice;
+            std::cout << "Chose: " << difficultyLevel[m_difficulty - 1] << ".\n";
+        }
+        
+        int getDifficulty() const {
+            return m_difficulty;
         }
 };
 
@@ -58,7 +76,8 @@ class CasinoGame {
     private:
         bool m_win {false};
         bool m_draw {false};
-        int m_bet_amount {0};
+        double m_bet_amount {0};
+        double m_multiplier {2.0};
 
     protected:
         void askBet(Player& p) {
@@ -74,7 +93,15 @@ class CasinoGame {
         }
 
         void awardRewards(Player& p) {
-            p.addToBalance(m_bet_amount * 2);
+            p.addToBalance(m_bet_amount * m_multiplier);
+        }
+
+        void setMultiplier(double mul) {
+            m_multiplier = mul;
+        }
+        
+        void resetMultiplier() {
+            m_multiplier = 2;
         }
 
         void refundBet(Player& p) {
@@ -248,6 +275,137 @@ class Card {
         }
 };
 
+class GuessTheCard : public CasinoGame {
+    private:
+        Card m_deck {};
+        int tries {};
+        const std::array<std::string, 4> suits { "spades", "hearts", "diamonds", "clubs" };
+        int m_numOflives {10};
+    public:
+        std::string getGameName() const override {
+            return "GuessTheCard";
+        }
+
+        void cleanupGame() override {
+            tries = 0;
+            resetMultiplier();
+            m_deck.resetDeck();
+        }
+
+        void setNumOfLives(int lives) {
+            m_numOflives = lives;
+        }
+
+        void checkRankGuess(int rankGuess, int cardRank) {
+            if (rankGuess > cardRank) {
+                std::cout << "Your guess is too high. Try again!\n";
+            } else if (rankGuess < cardRank) {
+                std::cout << "Your guess is too low. Try again!\n";
+            } else {
+                std::cout << "You guessed the correct rank! ";
+            }
+        }
+
+        void play(Player& p) override {
+            Outcome result {Outcome::PlayerLose};
+            std::cout << "Welcome to Guess The Card!\n";
+            askBet(p);
+
+            PlayingCard card = m_deck.drawCard();
+
+            // easy medium or hard
+            p.askDifficulty();
+            std::cout << "The card has be drawn. ";
+            if (p.getDifficulty() == 1) {
+                std::cout << "You chose easy, so the gamemode is High or Low!\n";
+            } else {
+                std::cout << "You didnt choose easy, so the gamemode is guess the exact card.\n";
+            }
+            
+            int rankGuess {}; // ace = 1, jack = 11, queen = 12, king = 13
+            std::string suitGuess {};
+            bool guessedCorrectly {false};
+            double maxMultiplier = (p.getDifficulty() == 1) ? 4.0 : (p.getDifficulty() == 2) ? 6.0 : 8.0;
+            double minMultiplier = 1.5;
+
+            
+            while (tries < m_numOflives) {
+                bool validSuit = false;
+                std::cout << "You have " << m_numOflives - tries << " lives left.\n";
+                std::cout << "What rank is the card(ace = 1, jack = 11, queen = 12, king = 13)? Type your guess: ";
+                if (!Utils::tryRead(rankGuess)) { continue; }
+                ++tries;
+                
+                double multiplier = maxMultiplier - ((maxMultiplier - minMultiplier) * (tries - 1) / (m_numOflives - 1));
+                setMultiplier(multiplier);
+                rankGuess--;
+                
+                if (p.getDifficulty() == 1) {
+                    //easy
+                    checkRankGuess(rankGuess, card.rank);
+                    if (card.rank == rankGuess) {
+                        guessedCorrectly = true;
+                        result = Outcome::PlayerWin;
+                        std::cout << "It took " << tries;
+                        if (tries == 1) {
+                            std::cout << "try.\n";
+                        } else {
+                            std::cout << " tries.\n"; 
+                        }
+                        break;
+                    }
+                } else if (p.getDifficulty() == 2 ||  p.getDifficulty() == 3) {
+                    //medium
+                    std::cout << "What suit is the card? Type your guess: ";
+                    std::cin >> suitGuess;
+                    for (char& character : suitGuess) {
+                        character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+                    }
+
+                    for (const auto& suit : suits) {
+                        if (suitGuess == suit) {
+                            validSuit = true;
+                            break;
+                        }
+                    }
+
+                    if (!validSuit) {
+                        std::cout << "Invalid suit. Try again.\n";
+                        continue;
+                    }
+
+                    if (suitGuess == suits[card.suit] && rankGuess == card.rank) {
+                        guessedCorrectly = true;
+                        result = Outcome::PlayerWin;
+                        std::cout << "You got the correct suit and rank!\n";
+                        std::cout << "It took " << tries;
+                        if (tries == 1) {
+                            std::cout << "try.\n";
+                        } else {
+                            std::cout << " tries.\n"; 
+                        }
+                        break;
+                    } else if (suitGuess == suits[card.suit]) {
+                        std::cout << "You got only the suit correct.\n";
+                        checkRankGuess(rankGuess, card.rank);
+                    } else if (rankGuess == card.rank) {
+                        std::cout << "You got only the rank correct.\n";
+                    } else {
+                        std::cout << "You got both wrong.\n";
+                        checkRankGuess(rankGuess, card.rank);
+                    }
+                }
+            }
+            std::cout << "The card was: " << card << "\n";
+            if (!guessedCorrectly) {
+                std::cout << "You ran out of lives. You lose.\n"; 
+                result = Outcome::PlayerLose;
+            }
+            resolveOutcome(result, p);
+        }
+};
+
+
 class BlackJack : public CasinoGame {
     private:
         Card m_deck {};
@@ -402,6 +560,7 @@ int main() {
     std::vector<std::unique_ptr<CasinoGame>> games;
     games.push_back(std::make_unique<CoinFlip>());
     games.push_back(std::make_unique<BlackJack>());
+    games.push_back(std::make_unique<GuessTheCard>());
     
     
     while (true) {
