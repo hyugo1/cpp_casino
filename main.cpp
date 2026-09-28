@@ -281,6 +281,17 @@ class GuessTheCard : public CasinoGame {
         int tries {};
         const std::array<std::string, 4> suits { "spades", "hearts", "diamonds", "clubs" };
         int m_numOflives {10};
+        PlayingCard card {};
+        Outcome result {Outcome::PlayerLose};
+        int inputRank {}; // ace = 1, jack = 11, queen = 12, king = 13
+        std::string inputSuit {};
+        bool guessedCorrectly {false};
+
+        bool hasGuessedSuit {false};
+        bool hasGuessedRank {false};
+        std::string confirmedSuit {};
+        int confirmedRank {};
+
     public:
         std::string getGameName() const override {
             return "GuessTheCard";
@@ -290,6 +301,14 @@ class GuessTheCard : public CasinoGame {
             tries = 0;
             resetMultiplier();
             m_deck.resetDeck();
+            hasGuessedSuit = false;
+            hasGuessedRank = false;
+            guessedCorrectly = false;
+            result = Outcome::PlayerLose;
+            confirmedSuit = "";
+            confirmedRank = 0;
+            inputRank = 0;
+            inputSuit = "";
         }
 
         void setNumOfLives(int lives) {
@@ -310,33 +329,38 @@ class GuessTheCard : public CasinoGame {
             return rankGuess + 1;
         }
 
-        void play(Player& p) override {
-            Outcome result {Outcome::PlayerLose};
+        void handleEasyGuess() {
+            guessedCorrectly = true;
+            result = Outcome::PlayerWin;
+            std::cout << "It took " << tries;
+            if (tries == 1) {
+                std::cout << " try.\n";
+            } else {
+                std::cout << " tries.\n"; 
+            }
+        }
+
+        void setup(Player& p) {
+            //setup
             std::cout << "Welcome to Guess The Card!\n";
             askBet(p);
-
-            PlayingCard card = m_deck.drawCard();
+            card = m_deck.drawCard();
 
             // easy medium or hard
             p.askDifficulty();
-            std::cout << "The card has be drawn. ";
+            std::cout << "The card has been drawn. ";
             if (p.getDifficulty() == 1) {
                 std::cout << "You chose easy, so the gamemode is High or Low!\n";
             } else {
                 std::cout << "You didnt choose easy, so the gamemode is guess the exact card.\n";
             }
-            
-            int inputRank {}; // ace = 1, jack = 11, queen = 12, king = 13
-            std::string inputSuit {};
-            bool guessedCorrectly {false};
+        }
+
+        void play(Player& p) override {
+            setup(p);
+
             double maxMultiplier = (p.getDifficulty() == 1) ? 4.0 : (p.getDifficulty() == 2) ? 6.0 : 8.0;
             double minMultiplier = 1.5;
-
-            bool hasGuessedSuit {false};
-            bool hasGuessedRank {false};
-            std::string confirmedSuit {};
-            int confirmedRank {};
-            
             while (tries < m_numOflives) {
                 bool validSuit = false;
         
@@ -359,17 +383,10 @@ class GuessTheCard : public CasinoGame {
                     checkRankGuess(activeRank, card.rank);
                     ++tries;
                     if (card.rank == activeRank) {
-                        guessedCorrectly = true;
-                        result = Outcome::PlayerWin;
-                        std::cout << "It took " << tries;
-                        if (tries == 1) {
-                            std::cout << "try.\n";
-                        } else {
-                            std::cout << " tries.\n"; 
-                        }
+                        handleEasyGuess();
                         break;
                     }
-                } else if (p.getDifficulty() == 2 ||  p.getDifficulty() == 3) {
+                } else {
                     if (!hasGuessedSuit) {
                         std::cout << "What suit is the card(spades, hearts, diamonds, clubs)? Type your guess: ";
                         if (!Utils::tryRead(inputSuit)) {
