@@ -66,7 +66,10 @@ class Player {
 
 class CasinoGame {
     public:
-        virtual void play(Player& p) = 0;
+    
+    // virtual void setup(Player& p) = 0;
+    virtual void setup(Player& p) {};
+    virtual void play(Player& p) = 0;
         virtual void cleanupGame() {};
         virtual std::string getGameName() const = 0;
         virtual ~CasinoGame() = default;
@@ -185,7 +188,7 @@ class CoinFlip : public CasinoGame {
                     // try again???
                     break;
                 }
-                std::cout << "Invalid input. Please enter H or T.\n";
+                std::cout << "❌ Invalid input. Please enter H or T.\n";
             }
 
             if (guess == bot_decision) {
@@ -220,7 +223,7 @@ std::ostream& operator<<(std::ostream& os, const PlayingCard& card) {
 
     if (card.rank < 0 || card.rank > 12 ||
         card.suit < 0 || card.suit > 3) {
-        os << "Invalid Card";
+        os << "❌ Invalid Card";
         return os;
     }
 
@@ -335,7 +338,7 @@ class GuessTheCard : public CasinoGame {
                 if (rank >= 1 && rank <= 13) {
                     return rank - 1; // convert to 0–12
                 }
-                std::cout << "Invalid rank. Try again.\n";
+                std::cout << "❌ Invalid rank. Try again.\n";
             }
         }
 
@@ -355,7 +358,7 @@ class GuessTheCard : public CasinoGame {
                         return suit;
                     }
                 }
-                std::cout << "Invalid suit. Try again.\n";
+                std::cout << "❌ Invalid suit. Try again.\n";
             }
         }
 
@@ -402,7 +405,7 @@ class GuessTheCard : public CasinoGame {
             }
         }
 
-        void setup(Player& p) {
+        void setup(Player& p) override {
             std::cout << "🎴 Welcome to 'Guess The Card'!\n\n";
 
             askBet(p);
@@ -478,14 +481,21 @@ class GuessTheCard : public CasinoGame {
         }
 };
 
-
 class BlackJack : public CasinoGame {
     private:
         Card m_deck {};
-        int dealerTotal = 0;
-        int dealerNumAces = 0;
-        int playerTotal = 0;
-        int playerNumAces = 0;
+
+        struct RoundState {
+            Outcome result {Outcome::PlayerLose};
+            PlayingCard firstDrawDealer {};
+            PlayingCard secondDrawDealer {};
+            PlayingCard firstDrawPlayer {};
+            PlayingCard secondDrawPlayer {};
+            int dealerTotal = 0;
+            int dealerNumAces = 0;
+            int playerTotal = 0;
+            int playerNumAces = 0;
+        };
 
     public:
         std::string getGameName() const override {
@@ -493,10 +503,6 @@ class BlackJack : public CasinoGame {
         }
 
         void cleanupGame() override {
-            dealerTotal = 0;
-            dealerNumAces = 0;
-            playerTotal = 0;
-            playerNumAces = 0;
             m_deck.resetDeck();
         }
 
@@ -526,94 +532,157 @@ class BlackJack : public CasinoGame {
             }
         }
 
-        void play(Player& p) override {
-            Outcome result;
+         void setup(Player& p) override {
             std::cout << "🎴 Welcome to BlackJack!\n";
             askBet(p);
+        }
 
-            //rules.
+        void drawCards(RoundState& state) {
             // dealer
-            PlayingCard firstDrawDealer = m_deck.drawCard();
-            PlayingCard secondDrawDealer = m_deck.drawCard();
+            state.firstDrawDealer = m_deck.drawCard();
+            state.secondDrawDealer = m_deck.drawCard();
             
-            addCard(dealerTotal, dealerNumAces, firstDrawDealer);
-            addCard(dealerTotal, dealerNumAces, secondDrawDealer);
+            addCard(state.dealerTotal, state.dealerNumAces, state.firstDrawDealer);
+            addCard(state.dealerTotal, state.dealerNumAces, state.secondDrawDealer);
 
             //player
-            PlayingCard firstDrawPlayer = m_deck.drawCard();
-            PlayingCard secondDrawPlayer = m_deck.drawCard();
+            state.firstDrawPlayer = m_deck.drawCard();
+            state.secondDrawPlayer = m_deck.drawCard();
 
-            addCard(playerTotal, playerNumAces, firstDrawPlayer);
-            addCard(playerTotal, playerNumAces, secondDrawPlayer);
+            addCard(state.playerTotal, state.playerNumAces, state.firstDrawPlayer);
+            addCard(state.playerTotal, state.playerNumAces, state.secondDrawPlayer);
+        }
 
-            if (dealerTotal == 21 && playerTotal == 21) {
-                result = Outcome::Draw;
-                resolveOutcome(result, p);
-                return;
-            } else if (dealerTotal == 21) {
-                result = Outcome::DealerNatural;
-                resolveOutcome(result, p);
-                return;
+        bool checkNatural(Player& p, RoundState& state) {
+            if (state.dealerTotal == 21 && state.playerTotal == 21) {
+                state.result = Outcome::Draw;
+                resolveOutcome(state.result, p);
+                return true;
+            } else if (state.dealerTotal == 21) {
+                state.result = Outcome::DealerNatural;
+                resolveOutcome(state.result, p);
+                return true;
+            } 
+
+            return false;
+        }
+
+        void printDrawnCards(Player& p, RoundState& state) {
+                std::cout << "🎲 The dealer slides you your cards...\n";
+                std::cout << "🂠 Dealer shows: " << state.firstDrawDealer 
+                        << " and a hidden card.\n\n";
+
+                std::cout << "🃏 Your hand: " << state.firstDrawPlayer 
+                        << " and " << state.secondDrawPlayer << "\n";
+                std::cout << "Your total: " << state.playerTotal << "\n\n";
             }
 
-            std::cout << "The Dealer drew: " << firstDrawDealer  << ". The other card is a mystery.\n";
-            std::cout << p.getName() << " drew: " << firstDrawPlayer << " and " << secondDrawPlayer << ".\n";
-
-            if (playerTotal == 21) {
-                result = Outcome::PlayerNatural;
-                resolveOutcome(result, p);
-                return;
-            }
-
-            while (playerTotal <= 21) {
-                // hit or stand
-                std::cout << "Your total is: " << playerTotal << ".\n";
+        char askPlayerChoice() {
+            char c;
+            while (true) {
                 std::cout << "Would you like to Hit or Stand? ";
-                char playerChoice;
-                if (!Utils::tryRead(playerChoice)) {continue;}
-                playerChoice = std::toupper(playerChoice);
-                if (playerChoice == 'H') {
-                    // draw card
-                    PlayingCard drawCardForPlayer = m_deck.drawCard();
-                    addCard(playerTotal, playerNumAces, drawCardForPlayer);
-
-                    std::cout << "You chose Hit. " << p.getName() << " drew: " << drawCardForPlayer << ". Your total is now: " << playerTotal << ".\n";
-                    
-                } else if (playerChoice == 'S') {
-                    std::cout << "You chose stand.\n";
-                    break;
-                } else {
-                    std::cout << "Not a valid choice. Try again.\n";
+                if (!Utils::tryRead(c)) {
+                    continue;
                 }
+                c = std::toupper(c);
+                if (c == 'H' || c == 'S') {
+                    return c;
+                }
+                std::cout << "❌ Invalid character. Try again.\n";
             }
+        }
 
-            if (playerTotal > 21) {
-                result = Outcome::PlayerBust;
-                resolveOutcome(result, p);
+        void drawAdditionalCardForPlayer(RoundState& state) {
+            PlayingCard drawAdditionalCardForPlayer = m_deck.drawCard();
+            addCard(state.playerTotal, state.playerNumAces, drawAdditionalCardForPlayer);
+
+            std::cout << "You chose Hit. " << "You drew: " << drawAdditionalCardForPlayer << ". Your total is now: " << state.playerTotal << ".\n";
+        }
+
+        bool checkIfPlayerBust(Player& p, RoundState& state) {
+            if (state.playerTotal > 21) {
+                state.result = Outcome::PlayerBust;
+                resolveOutcome(state.result, p);
+                return true;
+            }
+            return false;
+        }
+
+        void dealerTurn(RoundState& state) {
+            std::cout << "The other card Dealer drew was: " << state.secondDrawDealer << ". The Dealer has: " << state.dealerTotal << ".\n";
+            while (state.dealerTotal < 17) {
+                PlayingCard drawCardForDealer = m_deck.drawCard();
+                addCard(state.dealerTotal, state.dealerNumAces, drawCardForDealer);
+
+                std::cout << "Dealer is drawing. Dealer drew: " << drawCardForDealer << ". The Dealer's total is now: " << state.dealerTotal << ".\n";
+            }
+            std::cout << "✋ Dealer stands.\n\n";
+        }
+
+        void checkOutcome(RoundState& state) {
+            std::cout << "The Dealer has: " << state.dealerTotal << ".\n";
+            std::cout << "You have: " << state.playerTotal << ".\n";
+            if (state.dealerTotal > 21) {
+                state.result = Outcome::DealerBust;
+            } else if (state.dealerTotal > state.playerTotal) {
+                state.result = Outcome::PlayerLose;
+            } else if (state.dealerTotal < state.playerTotal) {
+                state.result = Outcome::PlayerWin;
+            } else {
+                state.result = Outcome::Draw;
+            }
+        }
+
+        void playerTurn(RoundState& state) {
+            // hit or stand
+            while (state.playerTotal < 21) {
+                std::cout << "Your total is: " << state.playerTotal << ".\n";
+                char c = askPlayerChoice();
+                if (c == 'H') {
+                    // draw card
+                    drawAdditionalCardForPlayer(state);
+                } else if (c == 'S') {
+                    std::cout << "✋ You chose stand.\n";
+                    break;
+                } 
+            }
+        }
+
+        bool isBlackjack(Player& p, RoundState& state) {
+            if (state.playerTotal == 21) {
+                state.result = Outcome::PlayerNatural;
+                resolveOutcome(state.result, p);
+                return true;
+            }
+            return false;
+        }
+
+        void play(Player& p) override {
+            setup(p);
+            RoundState state;
+
+            drawCards(state);
+            
+            printDrawnCards(p, state);
+            
+            if (checkNatural(p, state)) {
                 return;
             }
             
-            std::cout << "The other card Dealer drew was: " << secondDrawDealer << ". The Dealer has: " << dealerTotal << ".\n";
-            // dealer must pick up while 16 or below, and stand if 17 or above.
-            while (dealerTotal < 17) {
-                PlayingCard drawCardForDealer = m_deck.drawCard();
-                addCard(dealerTotal, dealerNumAces, drawCardForDealer);
-
-                std::cout << "Dealer is drawing. Dealer drew: " << drawCardForDealer << ". The Dealer's total is now: " << dealerTotal << ".\n";
+            if (isBlackjack(p, state)) {
+                return;
             }
 
-            std::cout << "The Dealer has: " << dealerTotal << ".\n";
-            std::cout << "You have: " << playerTotal << ".\n";
-            if (dealerTotal > 21) {
-                result = Outcome::DealerBust;
-            } else if (dealerTotal > playerTotal) {
-                result = Outcome::PlayerLose;
-            } else if (dealerTotal < playerTotal) {
-                result = Outcome::PlayerWin;
-            } else {
-                result = Outcome::Draw;
+            playerTurn(state);
+
+            if (checkIfPlayerBust(p, state)) {
+                return;
             }
-            resolveOutcome(result, p);
+
+            dealerTurn(state); // dealer must pick up while 16 or below, and stand if 17 or above.
+
+            checkOutcome(state);
+            resolveOutcome(state.result, p);
             return;
         }
     };
