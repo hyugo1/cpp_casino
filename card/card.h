@@ -1,4 +1,5 @@
 // card.h
+#pragma once
 
 #include <iostream>
 #include <random>
