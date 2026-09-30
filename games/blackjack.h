@@ -1,7 +1,7 @@
 #pragma once
 #include <random>
 #include "game/game.h"
-
+#include "card/card.h" 
 
 class BlackJack : public CasinoGame {
     private:

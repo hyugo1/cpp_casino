@@ -25,3 +25,6 @@ target_include_directories(main PRIVATE ${CMAKE_SOURCE_DIR})
 # cd build
 # build % cmake ..
 # cmake --build build
+
+# cmake -S . -B build
+# cmake --build build --clean-first

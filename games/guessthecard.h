@@ -1,6 +1,9 @@
 #pragma once
 #include <random>
+#include <array>
+#include <string>
 #include "game/game.h"
+#include "card/card.h" 
 
 class GuessTheCard : public CasinoGame {
     private:
